@@ -2,7 +2,7 @@
 # by hand: the next release overwrites it, and a hand-edited sha256 that no
 # longer matches its URL fails at install time on someone else's machine.
 class Agenthub < Formula
-  desc "Local gateway between AI clients and MCP servers: one config, one credential store, one governance pipeline"
+  desc "Local gateway between AI clients and MCP servers"
   homepage "https://github.com/dinstein/homebrew-agenthub"
   version "0.2.2"
   license "MIT"
