@@ -1,6 +1,6 @@
 ---
 name: agenthub
-description: Drive the agenthub CLI to give an AI client MCP tools - add a server (curated catalog, pasted config, or by hand), store its credentials, run its OAuth login, test it for real, connect it to Claude Code / Cursor / Codex / VS Code / Zed, and narrow what each client may see. Use whenever the task involves adding, authorizing, testing, or wiring up an MCP server, or diagnosing one that a client cannot reach.
+description: Drive the agenthub CLI to give an AI client MCP tools - add a server (curated catalog, pasted config, or by hand), store its credentials, run its OAuth login, test it for real, connect it to Claude Code / Cursor / Codex / VS Code / Zed, narrow what each client may see, and record the JSON-RPC wire when one misbehaves. Use whenever the task involves adding, authorizing, testing, or wiring up an MCP server, or diagnosing one a client cannot reach or that answers wrongly.
 ---
 
 # agenthub
@@ -337,9 +337,38 @@ them** — a server id or a tool name may contain it. Use `tool ls` output.
 | a tool vanished | a narrowing layer (§6) or a quarantine, before suspecting the server |
 | a server you added is invisible | `add` leaves it DISABLED — `agenthub server enable <id>` |
 | client sees nothing | did the user restart it? `client detect` to confirm the entry is in the file |
+| it connects, but a tool answers wrongly | record the wire — `server trace <id> on`, reproduce, `server logs <id>` (below) |
 
-`agenthub server logs <id>` is the JSON-RPC trace; `agenthub daemon logs` is
-the daemon's own structured log.
+### Recording the wire
+
+Once a server passes `server test` and still misbehaves inside the client,
+the question is no longer "is it reachable" but "what exactly did it say".
+Record the traffic and read it back:
+
+```bash
+agenthub server trace linear on      # off by default, per server
+# the user reproduces the problem in their client
+agenthub server logs linear          # -f/--follow to watch it live
+agenthub server trace linear off     # once you have the answer
+```
+
+**`server logs` only reads; `server trace` is what fills the file.** An empty
+log means nothing was recorded — **not** that the server sat idle. It shows
+the last 100 frames by default; `--limit 0` is all of them, and `--json`
+carries the full payloads (the human table truncates its DETAIL column).
+
+Three properties decide how to use it:
+
+- **It takes effect immediately.** A client that is already running starts recording without being restarted, and the server being investigated is not reconnected — you are reading the same connection that is misbehaving.
+- **Frames are captured before redaction.** Whatever the server actually returned sits verbatim in `<data>/logs/server-<id>.log`, the path `server trace` prints. That is the point of it, and the reason to turn it off again. Read it; do not paste one wholesale into a chat, an issue or a commit.
+- **It is per server, and it persists.** Nothing expires a trace, so one left on keeps recording across restarts. `server ls` grows a `TRACE` column while anything is traced, and only then — that is where to look when nobody remembers which server was left recording.
+
+There is no per-client or per-profile trace, and looking for one is wasted
+time: every session reaching a server shares one connection, so narrower
+recording cannot be honoured and is refused rather than approximated.
+
+`agenthub daemon logs` is a different thing — the daemon's own structured
+log, what the gateway did rather than what the server said.
 
 ## Rules that are not style preferences
 
@@ -347,5 +376,6 @@ the daemon's own structured log.
 - **Never invent a command or a flag.** `--help` is authoritative; this file may lag the binary.
 - **Never treat exit 6 as an obstacle.** Something refused on purpose. Report it.
 - **Show `--dry-run` output before editing a user's client config.**
+- **A trace is temporary and it is raw.** `server trace <id> off` when you have the answer, and never quote a trace file wholesale — it holds downstream responses captured before anything redacts them.
 - **`server test` before `client connect`.** Wiring an unverified server means the user debugs it inside their client, where the error is least legible.
 - **Say when a step needs a human** — the OAuth browser flow and the client restart both do. Claiming an unverifiable success is worse than reporting the handoff.
