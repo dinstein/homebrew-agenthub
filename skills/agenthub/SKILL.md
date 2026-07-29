@@ -15,14 +15,10 @@ a flag.** A plausible-looking command that does not exist is worse than no
 command, because it fails after the user has pasted it somewhere that matters.
 
 **This file stays on the surface a release build advertises** — `server`,
-`auth`, `catalog`, `profile`, `client` — and teaches nothing else. Other
-command groups do exist and do run, but a release deliberately keeps them off
-`--help` so the binary recommends one route; a command the user cannot find in
-their own `--help` is one they cannot check you on.
-
-There is exactly one exception, `secret` (§2), and it is made because the
-advertised path offers no other way to give a server an API key without
-writing the key into the registry — which is forbidden outright.
+`auth`, `secret`, `catalog`, `profile`, `client` — and teaches nothing else.
+Other command groups do exist and do run, but a release deliberately keeps
+them off `--help` so the binary recommends one route; a command the user
+cannot find in their own `--help` is one they cannot check you on.
 
 ## Before anything else
 
@@ -154,10 +150,13 @@ Skip this section unless the server authenticates with a key you have in
 hand. OAuth servers are §3, and they store their own credentials; a server
 that needs nothing needs nothing here.
 
-This is the one group off the release's help page that this file still uses,
-for the reason given at the top: the registry is plain configuration and must
-never hold a secret, so the key needs somewhere else to go. Put a
-**reference** in the definition and the value in the vault:
+`secret` sits beside `auth` in Setup because the two answer the same question
+for different servers: `auth` for the ones that hand out their own credential,
+`secret` for the ones that take a key the user already holds.
+
+The registry is plain configuration and must never hold a credential, so the
+key needs somewhere else to go. Put a **reference** in the definition and the
+value in the vault:
 
 ```bash
 agenthub server add brave --cmd npx --args "-y,@modelcontextprotocol/server-brave-search" \
@@ -171,9 +170,36 @@ agenthub server enable brave        # after the secret exists, so the probe can 
 `ps` on the machine. `secret set` reads no-echo from the terminal, or from
 stdin with `--stdin` for pipelines.
 
-`agenthub secret ls` lists key names and backends. There is no read path —
-values cannot be printed back, by design. If a user asks you to show a stored
-secret, the honest answer is that nothing can.
+The placeholder and the stored name must match: `${SECRET_<KEY>}` in the
+definition, `secret set <server> <KEY>` in the vault. Resolution happens at
+**dial time** and is fail-closed — an unresolved placeholder refuses the
+connection rather than sending the literal `${SECRET_X}` upstream, which would
+come back as a 401 indistinguishable from an expired token. HTTP servers take
+the same form: `--header "Authorization=Bearer \${SECRET_X}"`.
+
+The rest of the group:
+
+```bash
+agenthub secret ls [server]                 # KEY NAMES and backends, never values
+agenthub secret rm brave BRAVE_API_KEY      # from every writable backend
+agenthub secret migrate --from keyring --to enc-file [server] --dry-run
+```
+
+**There is no read path.** Values cannot be printed back, by design. If a user
+asks you to show a stored secret, the honest answer is that nothing can — and
+note that `agenthub secret get --help` exits 0 printing the root help, which is
+cobra's response to an unknown command, not evidence that `get` exists.
+
+Two things `secret ls` tells you that are easy to misread:
+
+- **`BACKEND` is the level a lookup would actually hit**, not where you put it. Resolution is four levels, first hit wins: `AGENTHUB_SECRET_<KEY>` in the environment, then a bare `<KEY>` (only with `AGENTHUB_ALLOW_BARE_SECRET_ENV=1`), then the encrypted file, then the OS keyring. So a row reading `env` means an environment variable is shadowing what you stored — that is the answer when a key you just set appears not to take effect.
+- **A listed key is set, but an empty or whitespace-only value counts as unset** at every level, so a server can still fail to authorize with the key sitting right there in the listing.
+
+`--scope` defaults to `_global` and is only for derived instances of one
+server holding their own credentials. Leave it alone unless the user raises
+it. `migrate` moves values only between `keyring` and `enc-file`; environment
+variables are per-process input, not a backend, so nothing migrates into or
+out of them.
 
 ## 3. OAuth login
 
@@ -302,8 +328,9 @@ the set. Pick by size, not by preference:
 
 So a client nobody configured gets `lazy`, and finds tools by calling
 `search_tools` rather than by reading a list it was handed. On a small surface
-that trade is not worth it — say so with `agenthub config set discovery full`
-rather than assuming the tool is missing.
+that trade is not worth it — put the client on a profile and say
+`agenthub profile discovery <profile> full` (§6), rather than assuming the
+tool is missing.
 
 Visibility is decided by the **scope**, never by the mode: `lazy` hides names
 from the initial list, it does not take capability away. Narrowing is §6's
