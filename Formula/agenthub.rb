@@ -35,8 +35,11 @@ class Agenthub < Formula
 
   def caveats
     <<~EOS
-      Point an AI client at the gateway (this edits that client's own config,
-      so look at it first):
+      Add a downstream MCP server, then point an AI client at the gateway
+      (that second step edits the client's own config, so look at it first):
+
+        agenthub server add linear --url https://mcp.linear.app/mcp
+        agenthub server test linear
 
         agenthub client detect
         agenthub client connect claude-code --dry-run
@@ -44,6 +47,14 @@ class Agenthub < Formula
 
       Then restart the client. Servers added later need no further client
       changes — that is the point of the gateway.
+
+      By default a client sees every enabled server. To show it less, put the
+      narrowing in a profile and bind the client to it — rebinding takes
+      effect on a running session, no restart:
+
+        agenthub profile create research
+        agenthub profile server add research linear
+        agenthub client bind claude-code research
     EOS
   end
 

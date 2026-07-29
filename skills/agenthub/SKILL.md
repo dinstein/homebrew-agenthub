@@ -1,28 +1,37 @@
 ---
 name: agenthub
-description: Give an AI client MCP tools through agenthub - add a server from the curated catalog or a pasted config, store its credentials, run its OAuth login, test it for real, and connect it to Claude Code / Cursor / Codex / VS Code / Zed. Use whenever the task involves adding, authorizing, testing or wiring up an MCP server, or diagnosing one a client cannot reach.
+description: Drive the agenthub CLI to give an AI client MCP tools - add a server (curated catalog, pasted config, or by hand), store its credentials, run its OAuth login, test it for real, connect it to Claude Code / Cursor / Codex / VS Code / Zed, and narrow what each client may see. Use whenever the task involves adding, authorizing, testing, or wiring up an MCP server, or diagnosing one that a client cannot reach.
 ---
 
 # agenthub
 
 One gateway between every AI client and every MCP server. A client is
 configured **once**, against agenthub; servers are added, authorized and
-tested here afterwards without touching the client again.
+narrowed here afterwards without touching the client again.
 
-Everything below was verified against the released binary. If a command you
-want does not appear here, run `agenthub <group> --help` — **do not guess a
-flag.** A plausible-looking command that does not exist is worse than no
+Everything below was verified against the **released** binary. If a command
+you want does not appear here, run `agenthub <group> --help` — **do not guess
+a flag.** A plausible-looking command that does not exist is worse than no
 command, because it fails after the user has pasted it somewhere that matters.
+
+A release build's `--help` shows only the everyday path: `server`, `auth`,
+`catalog`, `profile`, `client`. Everything else — `secret`, `tool`, `audit`,
+`daemon`, `session`, `skill`, `doctor`, `config` — still **runs**, it is just
+kept off the opening page so a shipped binary recommends one route rather than
+listing thirteen. This file uses those commands where they are the right
+answer and says so each time.
 
 ## Before anything else
 
 ```bash
-agenthub doctor              # what is installed, where its data lives, what is broken
 agenthub server ls           # what is already configured
 agenthub client detect       # which AI clients exist on this machine
 ```
 
-`doctor --fix` performs safe repairs only.
+That is the whole orientation. `agenthub doctor` exists, but run it **when
+something is actually wrong** (§8) — it probes every configured server and
+the ambient client configs, so leading with it spends real time and prints a
+wall of findings before there is a problem to match them against.
 
 ### Always use `--json`, and branch on the exit code
 
@@ -42,9 +51,9 @@ wording of a message may change, these may not:
 | 1 | generic (downstream, network, internal) |
 | 2 | usage error — you got the flags wrong, re-read `--help` |
 | 3 | not found (server / profile / secret / skill) |
-| 4 | a background daemon is needed and is not running |
+| 4 | the daemon is offline and this command needs it |
 | 5 | authentication failure → the server needs `agenthub auth login` |
-| 6 | refused by governance — **not** a bug to route around |
+| 6 | refused by governance (HITL deny, quarantine) — **not** a bug to route around |
 | 7 | registry lock contention or corruption |
 
 Exit 6 deserves care: something deliberately said no. Report it and stop;
@@ -52,24 +61,29 @@ disabling the control that produced it is not a fix.
 
 ## 1. Add a server
 
-Try these **in order**. The first that fits is the least that can go wrong.
+### a. From the server's URL or command — the normal case
 
-### a. From the curated catalog — always try this first
+Most MCP servers are a URL. Add it directly:
 
 ```bash
-agenthub catalog search github          # or: agenthub catalog ls
-agenthub catalog show filesystem        # description, target, params, the exact add line
-agenthub catalog add fetch              # entries that need nothing: one command, done
-agenthub catalog add filesystem --param directory=/Users/me/projects
-agenthub catalog add github --name gh   # --name when the default id collides
+agenthub server add remote --url https://mcp.example.com/mcp
+agenthub server add local-dev --url http://127.0.0.1:3000/mcp --local
+
+# stdio (a process on this machine)
+agenthub server add my-server --cmd npx --args "-y,@scope/mcp-server"
 ```
 
-`catalog show` prints the add command with its parameters filled as
-`<placeholders>`. Read it rather than composing your own.
+`--local` is required for a literal loopback URL and allows **only** that; it
+never opens up RFC1918 addresses. Other useful flags: `--env KEY=VALUE`,
+`--header KEY=VALUE` (both repeatable), `--cwd`, `--transport`, and the
+`--oauth-*` pins in §3.
+
+If the server needs authorization, add it first and then §3 — `server add`
+does not need the credential up front.
 
 ### b. From a config the user already has
 
-If they paste an `mcpServers` block, a `claude mcp add-json` line, or another
+If they paste a `mcpServers` block, a `claude mcp add-json` line, or another
 client's config, feed it in whole instead of translating it by hand:
 
 ```bash
@@ -86,21 +100,22 @@ To adopt everything a client already has:
 agenthub client import cursor           # source becomes imported:cursor
 ```
 
-### c. By hand
+### c. From the curated catalog — a shortcut, not the main road
+
+The catalog holds a small hand-maintained set. It is worth a look when the
+user names a well-known server and you would otherwise be guessing at its
+package name or parameters; for anything else, go back to (a).
 
 ```bash
-# stdio (a process on this machine)
-agenthub server add my-server --cmd npx --args "-y,@scope/mcp-server"
-
-# HTTP
-agenthub server add remote --url https://mcp.example.com/mcp
-agenthub server add local-dev --url http://127.0.0.1:3000/mcp --local
+agenthub catalog search github          # or: agenthub catalog ls
+agenthub catalog show filesystem        # description, target, params, the exact add line
+agenthub catalog add filesystem --param directory=/Users/me/projects
+agenthub catalog add github --name gh   # --name when the default id collides
 ```
 
-`--local` is required for a literal loopback URL and allows **only** that; it
-never opens up RFC1918 addresses. Other useful flags: `--env KEY=VALUE`,
-`--header KEY=VALUE` (both repeatable), `--cwd`, `--transport`, and the
-`--oauth-*` pins in §3.
+`catalog show` prints the add command with its parameters filled as
+`<placeholders>`. Read it rather than composing your own. A miss here means
+nothing is wrong — most servers are simply not in it.
 
 ### Container isolation
 
@@ -113,7 +128,11 @@ agenthub server add sketchy --runtime docker --image ghcr.io/x/server:tag \
 degrades to running on the host. Default network is `none`; mounts are
 read-only unless you write `:rw`.
 
-## 2. Credentials
+## 2. Credentials — only for servers that take an API key
+
+Skip this section unless the server authenticates with a key you have in
+hand. OAuth servers are §3, and they store their own credentials; a server
+that needs nothing needs nothing here.
 
 The registry is plain configuration and must never hold a secret. Put a
 **reference** in the definition and the value in the vault:
@@ -132,6 +151,11 @@ stdin with `--stdin` for pipelines.
 `agenthub secret ls` lists key names and backends. There is no read path —
 values cannot be printed back, by design. If a user asks you to show a stored
 secret, the honest answer is that nothing can.
+
+`secret` is not on `agenthub --help` in a release build — credentials are
+normally handled for you by `server add` and `auth login`, so it is kept off
+the opening page. It runs exactly as documented here; `agenthub secret --help`
+works too.
 
 ## 3. OAuth login
 
@@ -190,7 +214,8 @@ land in**. Show both to the user before writing — this edits a file they own.
 `~/.cursor/mcp.json`, …), because the entry carries this machine's absolute
 agenthub path and a project-level file is meant to be committed. Pass
 `--placement project` only when the user asks to wire up one tree — and say
-that the path inside it is machine-specific.
+that the path inside it is machine-specific. To narrow what a client sees, use
+a profile (§6), never the file location.
 
 The written entry runs `agenthub connect --client <id>`, so **servers added
 later need no further client changes**. That is the whole point of the
@@ -202,60 +227,106 @@ must be edited by the user; say so rather than failing silently.
 **The client must be restarted to pick up the change.** Tell the user — an
 unrestarted client looks exactly like a broken gateway.
 
-`agenthub client disconnect <id>` reverses it.
+`agenthub client disconnect <id>` reverses it. With no target named it clears
+the user-level file and, only if nothing of ours is there, the project-level
+one — so an entry written by an older agenthub is still removed.
 
-### Giving two clients different tool sets
+## 6. Narrow what each client sees
 
-Bind a client to a named profile as you connect it:
+Default is every enabled server. Narrow with a profile, then bind clients:
 
 ```bash
-agenthub client connect cursor --profile research
+agenthub profile create research
+agenthub profile server add research brave                # <profile> then <server>
+agenthub profile tools research brave --only search       # or --all / --none
+agenthub profile discovery research lazy                  # or grouped / full / -
+agenthub client bind cursor research
+agenthub client ls                                        # who is on which profile
+agenthub client unbind cursor                             # back to the active profile
 ```
 
-The profile name is written into that client's own entry, so each client can
-carry a different one. Layers **intersect**: a profile can only take capability
-away, never add it. If a tool is unexpectedly missing from one client but
-present in another, look at its profile before suspecting the server.
+All narrowing lives on the **profile**; a client only selects one. There is no
+`agenthub scope` group, and a client binding never carries servers or tools of
+its own. Two clients that need different surfaces get two profiles.
 
-## 6. Kill switches
+A binding takes effect on **sessions that are already running** — the gateway
+recomputes and pushes `tools/list_changed`. Rebinding needs no client restart
+(unlike `client connect`, which edits the client's own file).
 
-These apply everywhere, regardless of profile:
+Binding to a profile that does not exist is accepted, warns, and fail-closes
+that client to an **empty** scope. If a client suddenly sees nothing, check
+`agenthub client ls` for a `MISSING` marker before suspecting the servers.
+
+The layers **intersect** for security fields: a narrower layer can only take
+capability away, never add it. If a tool is unexpectedly missing, look for a
+narrowing layer before suspecting the server.
+
+### Discovery: how the surface is presented
+
+`profile discovery` changes how tools are *surfaced*, never which tools are in
+the set. Pick by size, not by preference:
+
+| mode | what `tools/list` returns | use when |
+|---|---|---|
+| `full` | every visible tool, one entry each | small surfaces. This is the default when nothing sets a mode |
+| `grouped` | one aggregate entry per server, plus `call_tool` last | a mid-sized set: the client reads per-server entries first, then dispatches |
+| `lazy` | the meta-tools (`search_tools` / `describe_tool` / `call_tool` / …) plus any pinned tools | large surfaces — the client's context holds a handful of names instead of hundreds |
+| `-` | clears the profile's override | fall back to the global default (`agenthub config set discovery`) |
+
+Visibility is decided by the **scope**, never by the mode: `lazy` hides names
+from the initial list, it does not take capability away. Narrowing is §6's
+job. An unrecognised value degrades to `full` rather than erroring, which is
+why `profile discovery` rejects a typo at write time.
+
+Kill switches, which apply everywhere regardless of profile:
 
 ```bash
 agenthub server disable brave       # whole server, every client
-agenthub server enable brave
+agenthub tool disable brave search  # one tool, every client
+agenthub tool quarantine ls         # tools isolated by drift detection
 ```
+
+`tool disable` answers `E_TOOL_NOT_FOUND` (exit 3) for a tool that has never
+been seen — the switch acts on the cached catalog, so the server must have
+connected at least once. Run `agenthub server test <id>` first, then disable.
+`server disable` has no such requirement and is the blunter instrument if the
+server has never come up at all.
 
 ## 7. Verify end to end
 
+Everything from here on uses commands a release build keeps **off** its help
+page. They run normally and are documented here on purpose — a shipped binary
+leads with the setup path, and these are the ones you reach for once something
+already exists. `agenthub <group> --help` still works for each.
+
 ```bash
-agenthub server ls                  # what is configured and enabled
-agenthub server inspect brave       # one server's config, cached tools, live health
+agenthub tool ls                    # the aggregated catalog a client will see
+agenthub tool ls --search search    # ranked against a keyword query
+agenthub audit                      # calls that actually arrived
 ```
 
-`server inspect` works with no daemon running; it says so in a warning and
-reads the persisted cache rather than a live handshake.
-
-The honest proof that wiring worked is the user's client itself: after they
-restart it and ask it to use a tool, the tool answers. A written config file
-is not proof.
+`audit` is the only honest proof: it shows calls that **reached the gateway**,
+not that a config file was written. After the user restarts their client and
+asks it to use a tool, a new audit line is the confirmation.
 
 Exposed names are `<server>__<tool>`, but **never split on `__` to recover
-them** — a server id or a tool name may contain it.
+them** — a server id or a tool name may contain it. Use `tool ls` output.
 
 ## 8. When something does not work
 
 | symptom | look here |
 |---|---|
+| exit 4 | `agenthub daemon status`; start it with `agenthub daemon start` |
 | exit 5 | `agenthub auth status`, then `auth login <server>` |
-| exit 6 | governance refused. Do not route around it — report it |
-| exit 3 | check the id: `server ls`, `catalog ls` |
+| exit 6 | governance refused. `agenthub audit`, `tool quarantine ls`. Do not route around it |
+| exit 3 | check the id: `server ls`, `catalog ls`, `profile ls` |
 | exit 7 | another process holds the registry lock, or it is corrupt. `doctor` |
 | server will not connect | `server test <id>` first — it prints the real error and the child's stderr tail |
-| a tool vanished | the client's profile (§5) before suspecting the server |
+| a tool vanished | a narrowing layer (§6) or a quarantine, before suspecting the server |
 | client sees nothing | did the user restart it? `client detect` to confirm the entry is in the file |
 
-`agenthub server logs <id>` is the JSON-RPC trace for one downstream server.
+`agenthub server logs <id>` is the JSON-RPC trace; `agenthub daemon logs` is
+the daemon's own structured log.
 
 ## Rules that are not style preferences
 
