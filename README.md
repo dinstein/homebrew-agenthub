@@ -10,14 +10,36 @@ brew install agenthub
 
 ## What is in here
 
-`Formula/agenthub.rb`, and nothing else. It is **generated**, not hand-written:
-each release renders it from that release's own `checksums-cli.txt`, so the
-`sha256` values come from the artifacts that were actually published rather
-than from a human copying six hashes across.
+`Formula/agenthub.rb` is **generated**, not hand-written: each release renders
+it from that release's own `checksums-cli.txt`, so the `sha256` values come
+from the artifacts that were actually published rather than from a human
+copying six hashes across.
 
 Do not edit it by hand. The next release overwrites the file, and a hand-edited
 hash that no longer matches its URL fails at install time on somebody else's
 machine — the one place a mistake here is expensive.
+
+`skills/agenthub/SKILL.md` is the opposite: hand-written, and nothing
+regenerates it. It teaches an AI client how to drive the CLI — add a server,
+store its credentials, run its OAuth login, test it, wire it to a client.
+
+It is written against the **released** binary's command surface, which is
+smaller than a development build's: a release hides the scope, governance and
+operate command groups from `--help`. A skill written against `make bin` would
+therefore hand users commands their own binary does not advertise, and the
+failure arrives after they have pasted one somewhere that matters. When the
+CLI's visible surface changes, this file has to be re-checked by hand — verify
+against `bin/agenthub-release`, never `bin/agenthub`.
+
+Install it into Claude Code with:
+
+```sh
+mkdir -p ~/.claude/skills
+ln -s "$(brew --repository dinstein/agenthub)/skills/agenthub" ~/.claude/skills/agenthub
+```
+
+A symlink keeps it current: `brew update` pulls this repo, and the skill
+follows. Copy the directory instead if you would rather pin it.
 
 ## How it gets updated
 
