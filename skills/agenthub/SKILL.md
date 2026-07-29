@@ -268,8 +268,20 @@ The written entry runs `agenthub connect --client <id>`, so **servers added
 later need no further client changes**. That is the whole point of the
 gateway; do not go back and edit client configs per server.
 
-`client detect` reports `writable`. A client marked `no` (Codex writes TOML)
-must be edited by the user; say so rather than failing silently.
+`client detect` reports `writable`. A client marked `no` keeps its config in a
+format agenthub will not rewrite, and `client connect` refuses it — **exit 1,
+`E_GENERAL`**, not a silent no-op. Do not hand-edit the file to get around
+that: the refusal exists because rewriting the format costs the user their
+comments and layout. Use the client's own CLI, which writes it properly:
+
+```bash
+# Codex keeps ~/.codex/config.toml
+codex mcp add agenthub -- /opt/homebrew/bin/agenthub connect --client codex
+codex mcp get agenthub          # verify; `codex mcp remove agenthub` undoes it
+```
+
+Pass the **absolute** path (`command -v agenthub`), for the same reason
+`connect` writes one into the file it manages.
 
 **The client must be restarted to pick up the change.** Tell the user — an
 unrestarted client looks exactly like a broken gateway.
@@ -346,6 +358,17 @@ agenthub server disable brave       # whole server, every client, at once
 No profile can put a disabled server back, and it needs nothing to have
 connected first — it is the right instrument when a server has never come up
 at all, or when the answer is "not this server, not anywhere".
+
+**"Remove it" almost always means `disable`, not `rm`.** `server rm` deletes
+the whole footprint and does not ask twice: the stored credential, profile
+membership, governance rules naming it, integrity baselines, approval grants
+and the cached tool list all go with the entry. Secrets cannot be read back,
+so an OAuth login or an API key destroyed here is destroyed — the user
+re-authorizes from scratch. Audit records survive.
+
+So: `disable` when they want it to stop, `rm` only when they say they want it
+gone permanently — and say what `rm` takes before running it, because the
+command itself will not.
 
 To take away **one tool** rather than a whole server, that is profile work:
 `profile tools <profile> <server> --only …` on the profiles the affected
