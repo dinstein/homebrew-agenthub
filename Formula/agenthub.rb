@@ -3,29 +3,29 @@
 # longer matches its URL fails at install time on someone else's machine.
 class Agenthub < Formula
   desc "Local gateway between AI clients and MCP servers"
-  homepage "https://github.com/dinstein/agent-hub"
+  homepage "https://github.com/dinstein/homebrew-agenthub"
   version "0.5.0"
   license "MIT"
 
   on_macos do
     on_arm do
-      url "https://github.com/dinstein/agent-hub/releases/download/v0.5.0/agenthub-0.5.0-60b97a8-darwin-arm64.tar.gz"
-      sha256 "c64d1611fdc212961100c05d78e02757be0672e1e02fdbc30d9684f2b23196c5"
+      url "https://github.com/dinstein/homebrew-agenthub/releases/download/v0.5.0/agenthub-0.5.0-60b97a8-darwin-arm64.tar.gz"
+      sha256 "3a87a78543ed4e9f16aeb9919db1f1edb6298206966692ad07f984965046bf2c"
     end
     on_intel do
-      url "https://github.com/dinstein/agent-hub/releases/download/v0.5.0/agenthub-0.5.0-60b97a8-darwin-amd64.tar.gz"
-      sha256 "691bafc925e6414f5c2876dc9bd637fe72f45e8129bd564dc91c704b08f9c8ba"
+      url "https://github.com/dinstein/homebrew-agenthub/releases/download/v0.5.0/agenthub-0.5.0-60b97a8-darwin-amd64.tar.gz"
+      sha256 "7cf24068e24cf5b09ed921ca6eeb615793ebf359f85afb008616b3dad7291d23"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/dinstein/agent-hub/releases/download/v0.5.0/agenthub-0.5.0-60b97a8-linux-arm64.tar.gz"
-      sha256 "4b1343b4941ff74db0195bac06c52349643e8108120120356ee87326921cd5ec"
+      url "https://github.com/dinstein/homebrew-agenthub/releases/download/v0.5.0/agenthub-0.5.0-60b97a8-linux-arm64.tar.gz"
+      sha256 "8fe275d70ffa6ea942b22cc2bdc72e825e2345fbc48a625bdee10aab34b89f91"
     end
     on_intel do
-      url "https://github.com/dinstein/agent-hub/releases/download/v0.5.0/agenthub-0.5.0-60b97a8-linux-amd64.tar.gz"
-      sha256 "81a3dbc314296479d14fd3d5663d6dbf3f7e57ae3b7fd2ec57444005a92dc951"
+      url "https://github.com/dinstein/homebrew-agenthub/releases/download/v0.5.0/agenthub-0.5.0-60b97a8-linux-amd64.tar.gz"
+      sha256 "9ce90bbed21ad3c7673e1b79fce17c7171158746cf2b4ed763f926a2efe66db9"
     end
   end
 
