@@ -295,15 +295,20 @@ the set. Pick by size, not by preference:
 
 | mode | what `tools/list` returns | use when |
 |---|---|---|
-| `full` | every visible tool, one entry each | small surfaces. This is the default when nothing sets a mode |
+| `full` | every visible tool, one entry each | small surfaces, or a client that filters for itself — ask for it explicitly |
 | `grouped` | one aggregate entry per server, plus `call_tool` last | a mid-sized set: the client reads per-server entries first, then dispatches |
-| `lazy` | the meta-tools (`search_tools` / `describe_tool` / `call_tool` / …) plus any pinned tools | large surfaces — the client's context holds a handful of names instead of hundreds |
+| `lazy` | the meta-tools (`search_tools` / `describe_tool` / `call_tool` / …) plus any pinned tools | large surfaces — the client's context holds a handful of names instead of hundreds. **This is the default when nothing sets a mode** |
 | `-` | clears the profile's override | fall back to the global default |
+
+So a client nobody configured gets `lazy`, and finds tools by calling
+`search_tools` rather than by reading a list it was handed. On a small surface
+that trade is not worth it — say so with `agenthub config set discovery full`
+rather than assuming the tool is missing.
 
 Visibility is decided by the **scope**, never by the mode: `lazy` hides names
 from the initial list, it does not take capability away. Narrowing is §6's
-job. An unrecognised value degrades to `full` rather than erroring, which is
-why `profile discovery` rejects a typo at write time.
+job. An unrecognised value degrades to the default rather than erroring, which
+is why `profile discovery` rejects a typo at write time.
 
 The one kill switch that applies everywhere, above every profile:
 
