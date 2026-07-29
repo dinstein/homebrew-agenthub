@@ -61,6 +61,18 @@ disabling the control that produced it is not a fix.
 
 ## 1. Add a server
 
+**`server add` writes the definition and nothing else — the entry lands
+DISABLED.** `server enable <id>` is the second step, and it is where the
+connection probe runs. Adding is configuration; enabling is putting it into
+service, and only the second one needs the network.
+
+Two exceptions enable for you: **`catalog add`** composes add + enable, and
+**`auth login`** enables the server it just authorized — that is what keeps
+the OAuth path two commands (`add` → `login`) rather than three.
+
+`enable` reports what the probe found and **enables either way**: a server
+needing a login is enabled and says so. Pass `--no-probe` to skip the dial.
+
 ### a. From the server's URL or command — the normal case
 
 Most MCP servers are a URL. Add it directly:
@@ -71,6 +83,9 @@ agenthub server add local-dev --url http://127.0.0.1:3000/mcp --local
 
 # stdio (a process on this machine)
 agenthub server add my-server --cmd npx --args "-y,@scope/mcp-server"
+
+# then, in every case:
+agenthub server enable <id>
 ```
 
 `--local` is required for a literal loopback URL and allows **only** that; it
@@ -79,7 +94,8 @@ never opens up RFC1918 addresses. Other useful flags: `--env KEY=VALUE`,
 `--oauth-*` pins in §3.
 
 If the server needs authorization, add it first and then §3 — `server add`
-does not need the credential up front.
+does not need the credential up front, and the `auth login` there enables it,
+so no separate `server enable` is needed on that path.
 
 ### b. From a config the user already has
 
@@ -88,6 +104,7 @@ client's config, feed it in whole instead of translating it by hand:
 
 ```bash
 echo "$JSON" | agenthub server add my-server --stdin
+agenthub server enable my-server
 ```
 
 Unknown keys are **rejected**, not silently dropped. An error here means the
@@ -109,6 +126,7 @@ package name or parameters; for anything else, go back to (a).
 ```bash
 agenthub catalog search github          # or: agenthub catalog ls
 agenthub catalog show filesystem        # description, target, params, the exact add line
+agenthub catalog add fetch              # entries that need nothing: added AND enabled
 agenthub catalog add filesystem --param directory=/Users/me/projects
 agenthub catalog add github --name gh   # --name when the default id collides
 ```
@@ -142,6 +160,7 @@ agenthub server add brave --cmd npx --args "-y,@modelcontextprotocol/server-brav
   --env "BRAVE_API_KEY=\${SECRET_BRAVE_API_KEY}"
 
 printf %s "$TOKEN" | agenthub secret set brave BRAVE_API_KEY --stdin
+agenthub server enable brave        # after the secret exists, so the probe can succeed
 ```
 
 **Never put a credential in an argv.** It lands in shell history and in every
@@ -151,11 +170,6 @@ stdin with `--stdin` for pipelines.
 `agenthub secret ls` lists key names and backends. There is no read path —
 values cannot be printed back, by design. If a user asks you to show a stored
 secret, the honest answer is that nothing can.
-
-`secret` is not on `agenthub --help` in a release build — credentials are
-normally handled for you by `server add` and `auth login`, so it is kept off
-the opening page. It runs exactly as documented here; `agenthub secret --help`
-works too.
 
 ## 3. OAuth login
 
@@ -179,6 +193,9 @@ When discovery fails, pin what the provider does not advertise —
 `--issuer`, `--scopes`, `--redirect-uri`, `--authorization-endpoint` — or
 store the pins on the entry with `server add --oauth-issuer` /
 `--oauth-scope` / `--oauth-resource-metadata` so every later login uses them.
+
+A successful `auth login` also **enables** the server, so an OAuth downstream
+is `server add` → `auth login` and nothing more.
 
 Exit 5 anywhere else means the credential expired: `auth login` again.
 
@@ -294,11 +311,6 @@ server has never come up at all.
 
 ## 7. Verify end to end
 
-Everything from here on uses commands a release build keeps **off** its help
-page. They run normally and are documented here on purpose — a shipped binary
-leads with the setup path, and these are the ones you reach for once something
-already exists. `agenthub <group> --help` still works for each.
-
 ```bash
 agenthub tool ls                    # the aggregated catalog a client will see
 agenthub tool ls --search search    # ranked against a keyword query
@@ -323,6 +335,7 @@ them** — a server id or a tool name may contain it. Use `tool ls` output.
 | exit 7 | another process holds the registry lock, or it is corrupt. `doctor` |
 | server will not connect | `server test <id>` first — it prints the real error and the child's stderr tail |
 | a tool vanished | a narrowing layer (§6) or a quarantine, before suspecting the server |
+| a server you added is invisible | `add` leaves it DISABLED — `agenthub server enable <id>` |
 | client sees nothing | did the user restart it? `client detect` to confirm the entry is in the file |
 
 `agenthub server logs <id>` is the JSON-RPC trace; `agenthub daemon logs` is
