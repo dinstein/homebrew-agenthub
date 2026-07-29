@@ -24,11 +24,12 @@ cannot find in their own `--help` is one they cannot check you on.
 
 ```bash
 agenthub server ls           # what is already configured
-agenthub client detect       # which AI clients exist on this machine
+agenthub client ls           # which clients are wired up, and what each may see
 ```
 
 That is the whole orientation, and it is enough: the first tells you what is
-already configured, the second what is on the machine to configure it for.
+already configured, the second which clients are already wired to it (add
+`agenthub client detect` when you need the config paths themselves).
 Nothing else needs to run before you know what the user is asking for.
 
 ### Always use `--json`, and branch on the exit code
@@ -109,10 +110,11 @@ Unknown keys are **rejected**, not silently dropped. An error here means the
 paste really does contain something agenthub does not model — read it, do not
 strip fields to make it pass.
 
-To adopt everything a client already has:
+To adopt what a client already has, read its config and paste the entries
+back in — there is no bulk import:
 
 ```bash
-agenthub client import cursor           # source becomes imported:cursor
+agenthub client inspect cursor          # every location, and what is in each
 ```
 
 ### c. From the curated catalog — a shortcut, not the main road
@@ -249,6 +251,7 @@ read-only tools freely, anything that writes only when the user asked for it.
 ## 5. Connect the client
 
 ```bash
+agenthub client ls                           # who is wired up, and on which profile
 agenthub client detect                       # ids, config paths, writability
 agenthub client connect claude-code --dry-run    # ALWAYS look first
 agenthub client connect claude-code
@@ -269,22 +272,40 @@ later need no further client changes**. That is the whole point of the
 gateway; do not go back and edit client configs per server.
 
 `client detect` reports `writable`. A client marked `no` keeps its config in a
-format agenthub will not rewrite, and `client connect` refuses it — **exit 1,
-`E_GENERAL`**, not a silent no-op. Do not hand-edit the file to get around
-that: the refusal exists because rewriting the format costs the user their
-comments and layout. Use the client's own CLI, which writes it properly:
+format agenthub will not rewrite — re-encoding it would cost the user their
+comments and layout.
 
-```bash
-# Codex keeps ~/.codex/config.toml
-codex mcp add agenthub -- /opt/homebrew/bin/agenthub connect --client codex
-codex mcp get agenthub          # verify; `codex mcp remove agenthub` undoes it
-```
+For **codex** that is not a dead end: `client connect codex` runs
+`codex mcp add` for them, after backing the file up and before verifying the
+result by reading it back. It needs `codex` on PATH; without it the command
+refuses (**exit 1, `E_GENERAL`**, never a silent no-op) and prints what to
+run. `client disconnect codex` runs `codex mcp remove` the same way, and
+names the entry that is actually in the file rather than assuming it is
+called `agenthub`.
 
-Pass the **absolute** path (`command -v agenthub`), for the same reason
-`connect` writes one into the file it manages.
+Pass `--manual` when the user does not want agenthub executing another
+program; `AGENTHUB_NO_CLIENT_CLI=1` does it for the whole machine. Either way
+they get the instructions instead.
+
+For **continue** (YAML) there is no such CLI: agenthub neither reads nor
+writes it, so `client ls` says `?` and the entry goes in by hand.
+
+Never hand-edit a format to get around a refusal without saying so — the
+refusal is about protecting the file, not about agenthub's convenience.
 
 **The client must be restarted to pick up the change.** Tell the user — an
 unrestarted client looks exactly like a broken gateway.
+
+`agenthub client ls` reports whether the entry is actually in each client's
+file. Read its CONNECTED column literally: `yes` / `no` are answers, and
+`denied`, `unreadable` and `?` are not — they mean agenthub could not read
+the file, could not parse it, or does not parse that format at all, and none
+of the three is fixed by running connect again. `agenthub client inspect <id>`
+says which file and why. `--stat-only` skips the reads entirely (no macOS
+privacy prompt) at the cost of answering `?` for everything.
+
+For codex specifically, `?` means the file is there but written in a way
+agenthub's TOML reader does not model — not that the entry is missing.
 
 `agenthub client disconnect <id>` reverses it. With no target named it clears
 the user-level file and, only if nothing of ours is there, the project-level
@@ -300,7 +321,7 @@ agenthub profile server add research brave                # <profile> then <serv
 agenthub profile tools research brave --only search       # or --all / --none
 agenthub profile discovery research lazy                  # or grouped / full / -
 agenthub client bind cursor research
-agenthub client ls                                        # who is on which profile
+agenthub client ls                                        # connected? and on which profile
 agenthub client unbind cursor                             # back to the fallback profile
 agenthub profile use research                             # the fallback every UNBOUND client gets ("-" clears it)
 ```
@@ -381,7 +402,7 @@ switch on this path.
 ```bash
 agenthub server inspect brave --tools   # what is recorded for one server, offline
 agenthub server test brave --tools      # what it answers today, live
-agenthub client ls                      # who is on which profile, and so what each sees
+agenthub client ls                      # who is wired up, and what each may see
 ```
 
 `inspect` reads the cache — the last contact, not a handshake made now — so it
