@@ -14,12 +14,15 @@ you want does not appear here, run `agenthub <group> --help` — **do not guess
 a flag.** A plausible-looking command that does not exist is worse than no
 command, because it fails after the user has pasted it somewhere that matters.
 
-A release build's `--help` shows only the everyday path: `server`, `auth`,
-`catalog`, `profile`, `client`. Everything else — `secret`, `tool`, `audit`,
-`daemon`, `session`, `skill`, `doctor`, `config` — still **runs**, it is just
-kept off the opening page so a shipped binary recommends one route rather than
-listing thirteen. This file uses those commands where they are the right
-answer and says so each time.
+**This file stays on the surface a release build advertises** — `server`,
+`auth`, `catalog`, `profile`, `client` — and teaches nothing else. Other
+command groups do exist and do run, but a release deliberately keeps them off
+`--help` so the binary recommends one route; a command the user cannot find in
+their own `--help` is one they cannot check you on.
+
+There is exactly one exception, `secret` (§2), and it is made because the
+advertised path offers no other way to give a server an API key without
+writing the key into the registry — which is forbidden outright.
 
 ## Before anything else
 
@@ -28,10 +31,9 @@ agenthub server ls           # what is already configured
 agenthub client detect       # which AI clients exist on this machine
 ```
 
-That is the whole orientation. `agenthub doctor` exists, but run it **when
-something is actually wrong** (§8) — it probes every configured server and
-the ambient client configs, so leading with it spends real time and prints a
-wall of findings before there is a problem to match them against.
+That is the whole orientation, and it is enough: the first tells you what is
+already configured, the second what is on the machine to configure it for.
+Nothing else needs to run before you know what the user is asking for.
 
 ### Always use `--json`, and branch on the exit code
 
@@ -152,7 +154,9 @@ Skip this section unless the server authenticates with a key you have in
 hand. OAuth servers are §3, and they store their own credentials; a server
 that needs nothing needs nothing here.
 
-The registry is plain configuration and must never hold a secret. Put a
+This is the one group off the release's help page that this file still uses,
+for the reason given at the top: the registry is plain configuration and must
+never hold a secret, so the key needs somewhere else to go. Put a
 **reference** in the definition and the value in the vault:
 
 ```bash
@@ -259,8 +263,14 @@ agenthub profile tools research brave --only search       # or --all / --none
 agenthub profile discovery research lazy                  # or grouped / full / -
 agenthub client bind cursor research
 agenthub client ls                                        # who is on which profile
-agenthub client unbind cursor                             # back to the active profile
+agenthub client unbind cursor                             # back to the fallback profile
+agenthub profile use research                             # the fallback every UNBOUND client gets ("-" clears it)
 ```
+
+`profile tools` takes the server's **own** tool names (`search`), not the
+`brave__search` the client displays; `agenthub server test <id> --tools`
+lists them. A name matching nothing is not an error, so read back
+`agenthub profile ls` instead of assuming it landed.
 
 All narrowing lives on the **profile**; a client only selects one. There is no
 `agenthub scope` group, and a client binding never carries servers or tools of
@@ -288,51 +298,60 @@ the set. Pick by size, not by preference:
 | `full` | every visible tool, one entry each | small surfaces. This is the default when nothing sets a mode |
 | `grouped` | one aggregate entry per server, plus `call_tool` last | a mid-sized set: the client reads per-server entries first, then dispatches |
 | `lazy` | the meta-tools (`search_tools` / `describe_tool` / `call_tool` / …) plus any pinned tools | large surfaces — the client's context holds a handful of names instead of hundreds |
-| `-` | clears the profile's override | fall back to the global default (`agenthub config set discovery`) |
+| `-` | clears the profile's override | fall back to the global default |
 
 Visibility is decided by the **scope**, never by the mode: `lazy` hides names
 from the initial list, it does not take capability away. Narrowing is §6's
 job. An unrecognised value degrades to `full` rather than erroring, which is
 why `profile discovery` rejects a typo at write time.
 
-Kill switches, which apply everywhere regardless of profile:
+The one kill switch that applies everywhere, above every profile:
 
 ```bash
-agenthub server disable brave       # whole server, every client
-agenthub tool disable brave search  # one tool, every client
-agenthub tool quarantine ls         # tools isolated by drift detection
+agenthub server disable brave       # whole server, every client, at once
 ```
 
-`tool disable` answers `E_TOOL_NOT_FOUND` (exit 3) for a tool that has never
-been seen — the switch acts on the cached catalog, so the server must have
-connected at least once. Run `agenthub server test <id>` first, then disable.
-`server disable` has no such requirement and is the blunter instrument if the
-server has never come up at all.
+No profile can put a disabled server back, and it needs nothing to have
+connected first — it is the right instrument when a server has never come up
+at all, or when the answer is "not this server, not anywhere".
+
+To take away **one tool** rather than a whole server, that is profile work:
+`profile tools <profile> <server> --only …` on the profiles the affected
+clients are on, plus `profile use` for the fallback that unbound clients get.
+Two clients that must differ get two profiles; there is no global per-tool
+switch on this path.
 
 ## 7. Verify end to end
 
 ```bash
-agenthub tool ls                    # the aggregated catalog a client will see
-agenthub tool ls --search search    # ranked against a keyword query
-agenthub audit                      # calls that actually arrived
+agenthub server inspect brave --tools   # what is recorded for one server, offline
+agenthub server test brave --tools      # what it answers today, live
+agenthub client ls                      # who is on which profile, and so what each sees
 ```
 
-`audit` is the only honest proof: it shows calls that **reached the gateway**,
-not that a config file was written. After the user restarts their client and
-asks it to use a tool, a new audit line is the confirmation.
+`inspect` reads the cache — the last contact, not a handshake made now — so it
+answers "what would a cold gateway serve". `test` connects and answers "what
+does this server say today". When the two disagree, `test` is the truth and
+the cache is stale.
+
+**None of that proves a client is using any of it.** A written config file
+shows intent; the confirmation is the client itself, restarted, calling a tool
+and getting an answer back. When you need to see that the call arrived and
+what the server replied, record it — §8.
 
 Exposed names are `<server>__<tool>`, but **never split on `__` to recover
-them** — a server id or a tool name may contain it. Use `tool ls` output.
+them** — a server id or a tool name may itself contain it. Take the server
+from the listing you asked for and the tool name from `server test --tools`.
 
 ## 8. When something does not work
 
 | symptom | look here |
 |---|---|
-| exit 4 | `agenthub daemon status`; start it with `agenthub daemon start` |
-| exit 5 | `agenthub auth status`, then `auth login <server>` |
-| exit 6 | governance refused. `agenthub audit`, `tool quarantine ls`. Do not route around it |
 | exit 3 | check the id: `server ls`, `catalog ls`, `profile ls` |
-| exit 7 | another process holds the registry lock, or it is corrupt. `doctor` |
+| exit 4 | the command needed a running daemon. Nothing on the path above does — re-read what you actually ran |
+| exit 5 | `agenthub auth status`, then `auth login <server>` |
+| exit 6 | governance refused, deliberately. Report it and stop; do not route around it |
+| exit 7 | another process holds the registry lock, or it is corrupt. Retry once, then say so — do not delete state to clear it |
 | server will not connect | `server test <id>` first — it prints the real error and the child's stderr tail |
 | a tool vanished | a narrowing layer (§6) or a quarantine, before suspecting the server |
 | a server you added is invisible | `add` leaves it DISABLED — `agenthub server enable <id>` |
@@ -367,8 +386,10 @@ There is no per-client or per-profile trace, and looking for one is wasted
 time: every session reaching a server shares one connection, so narrower
 recording cannot be honoured and is refused rather than approximated.
 
-`agenthub daemon logs` is a different thing — the daemon's own structured
-log, what the gateway did rather than what the server said.
+A trace is the wire, not the gateway's own reasoning: it shows what the server
+said, never why agenthub decided something. If the frames look correct and the
+client still misbehaves, the problem is above this layer — check §6 for a
+narrowing that removed the tool.
 
 ## Rules that are not style preferences
 
