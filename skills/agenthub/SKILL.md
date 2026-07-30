@@ -206,9 +206,12 @@ agenthub secret migrate --from keyring --to enc-file [server] --dry-run
 ```
 
 **There is no read path.** Values cannot be printed back, by design. If a user
-asks you to show a stored secret, the honest answer is that nothing can — and
-note that `agenthub secret get --help` exits 0 printing the root help, which is
-cobra's response to an unknown command, not evidence that `get` exists.
+asks you to show a stored secret, the honest answer is that nothing can. There
+is no `secret get`, and asking for its help now says so: `agenthub secret get
+--help` and `agenthub help secret get` both exit **2** with `unknown command`.
+(Up to 0.11.0 they exited 0 printing the group's page, which reads exactly like
+a real command's answer — if you are on an old build, do not take that page as
+evidence that `get` exists.)
 
 Two things `secret ls` tells you that are easy to misread:
 
@@ -310,12 +313,15 @@ is the exception, immediately below: its connect delegates to the client's own
 CLI and really does succeed. `open-webui` has no file at all — it consumes MCP
 over HTTP, so what comes back is an endpoint to register on the Open WebUI side.
 
-The id list `client detect` prints under the table is **every** client agenthub
-knows about — it is there so "why is my client missing" is answered by the same
-output, and it is not the writable subset. Read the `WRITABLE` column, or the
-`agenthub does not write these itself:` line beside it, for that. (Releases up
-to 0.11.0 label the list `directly writable clients:`, which overstates it: it
-names `codex` on the same screen where codex's own row says `no`.)
+`client detect` prints two lists under the table, and the difference between
+them is the answer here. `supported clients:` is **every** client agenthub knows
+about — it is not the writable subset, and it is deliberately not filtered,
+because it is what answers "why is my client missing". The line below it,
+`agenthub does not write these itself:`, names the three, with the command that
+says what to do instead. (Releases up to 0.11.0 printed one list labelled
+`directly writable clients:`, which named `codex` on the same screen where
+codex's own row said `no`. If you see that label, you are on an old build and
+the `WRITABLE` column is the answer.)
 
 For **codex** that is not a dead end: `client connect codex` runs
 `codex mcp add` for them, after backing the file up and before verifying the
