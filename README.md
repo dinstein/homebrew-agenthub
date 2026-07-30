@@ -130,19 +130,8 @@ Two paths in the source repository write it, both through
 `.github/workflows/release.yml` on a version tag, and
 `scripts/release-local.sh` for when Actions cannot run.
 
-Release assets have lived in **this** repository rather than the source one,
-because `dinstein/agent-hub` was private and Homebrew cannot authenticate to a
-private repository's Release assets. That reason expired when the source repo
-went public: its Releases download without a token, so this tap only has to
-carry the formula and the skill. Which repository a rendered formula points at
-is `HOMEBREW_SOURCE_REPO` in `scripts/homebrew-formula.sh`.
-
-The assets already attached to `v0.11.0` and `v0.12.0` here stay: the formula
-that shipped with each of those versions points at them. They are **not**
-interchangeable with the source repo's copies of the same version — same file
-names, built on a different machine, therefore different `sha256`. A URL and
-the hash beside it must always come from one upload; mixing them produces a
-checksum mismatch that only the person installing ever sees.
+Which repository's Releases the download URLs point at is
+`HOMEBREW_SOURCE_REPO` in `scripts/homebrew-formula.sh`.
 
 The formula installs a prebuilt binary rather than building from source, for
 one reason: `-X main.channel=release` is what makes a shipped binary resolve
