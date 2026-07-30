@@ -81,18 +81,29 @@ mkdir -p ~/.claude/skills
 ln -s "$(brew --repository dinstein/agenthub)/skills/agenthub" ~/.claude/skills/agenthub
 ```
 
-A symlink keeps it current: `brew update` pulls this repo and the skill follows.
-Copy the directory instead if you would rather pin it.
+Or into Codex, which reads the same `<name>/SKILL.md` layout from its own
+directory:
+
+```sh
+mkdir -p ~/.codex/skills
+ln -s "$(brew --repository dinstein/agenthub)/skills/agenthub" ~/.codex/skills/agenthub
+```
+
+Both at once is fine — they are two symlinks to one directory, so there is no
+second copy to drift. A symlink keeps it current either way: `brew update` pulls
+this repo and the skill follows. Copy the directory instead if you would rather
+pin it.
 
 Then just ask — "add the Linear MCP server and wire it into Claude Code" — and
 it will run the same commands documented above, in the right order.
 
-The skill is written against the **released** binary, whose `--help` shows only
-the everyday path: `server`, `auth`, `catalog`, `profile`, `client`. The rest
-(`secret`, `tool`, `audit`, `daemon`, `session`, `skill`, `doctor`, `config`)
-still runs; it is kept off the opening page so a shipped binary recommends one
-route rather than listing thirteen. The skill uses those commands where they
-are the right answer and says so each time.
+The skill documents **exactly** what a released binary advertises — `server`,
+`auth`, `secret`, `catalog`, `profile`, `client` — and nothing else. Other
+groups (`tool`, `audit`, `daemon`, `session`, `skill`, `doctor`, `config`) do
+still run, but they are kept off `--help` so a shipped binary recommends one
+route rather than listing thirteen, and the skill stays inside that same line.
+A skill that reached past it would teach an agent commands the user cannot find
+in their own `--help`, which reads as the agent inventing them.
 
 ## The binary is not notarized
 
