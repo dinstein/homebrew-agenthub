@@ -310,9 +310,12 @@ is the exception, immediately below: its connect delegates to the client's own
 CLI and really does succeed. `open-webui` has no file at all — it consumes MCP
 over HTTP, so what comes back is an endpoint to register on the Open WebUI side.
 
-(Ignore the `directly writable clients:` line `client detect` prints under the
-table — it names every client agenthub supports, `codex` included, on the same
-screen where the `WRITABLE` column says `no`. The column is the answer.)
+The id list `client detect` prints under the table is **every** client agenthub
+knows about — it is there so "why is my client missing" is answered by the same
+output, and it is not the writable subset. Read the `WRITABLE` column, or the
+`agenthub does not write these itself:` line beside it, for that. (Releases up
+to 0.11.0 label the list `directly writable clients:`, which overstates it: it
+names `codex` on the same screen where codex's own row says `no`.)
 
 For **codex** that is not a dead end: `client connect codex` runs
 `codex mcp add` for them, after backing the file up and before verifying the
