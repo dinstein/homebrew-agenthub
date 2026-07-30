@@ -18,7 +18,9 @@ command, because it fails after the user has pasted it somewhere that matters.
 `auth`, `secret`, `catalog`, `profile`, `client` — and teaches nothing else.
 Other command groups do exist and do run, but a release deliberately keeps
 them off `--help` so the binary recommends one route; a command the user
-cannot find in their own `--help` is one they cannot check you on.
+cannot find in their own `--help` is one they cannot check you on. (`agenthub
+connect` is advertised as well, under "machine entry point": it is the command
+a client's own config runs, never one to type — see §5.)
 
 ## Before anything else
 
@@ -53,10 +55,16 @@ wording of a message may change, these may not:
 | 4 | the daemon is offline and this command needs it |
 | 5 | authentication failure → the server needs `agenthub auth login` |
 | 6 | refused by governance (HITL deny, quarantine) — **not** a bug to route around |
-| 7 | registry lock contention or corruption |
+| 7 | a lock is held, or stored state is corrupt and cannot self-heal |
 
 Exit 6 deserves care: something deliberately said no. Report it and stop;
 disabling the control that produced it is not a fix.
+
+Exit 7 is **not registry-only**, and reading it that way sends you to the
+wrong file: any of agenthub's cross-process locks produces it — the registry,
+the integrity baselines, the skills store, the token store — as does a state
+file that is corrupt beyond self-healing. So "which store" is a question the
+message answers and the exit code does not.
 
 ## 1. Add a server
 
@@ -146,6 +154,11 @@ agenthub server add sketchy --runtime docker --image ghcr.io/x/server:tag \
 degrades to running on the host. Default network is `none`; mounts are
 read-only unless you write `:rw`.
 
+That promise is checkable rather than taken on trust: `agenthub server inspect
+<id>` prints `spawns`, the exact `docker run` argv the spawner would execute.
+Read it when a container's isolation matters — the mounts, the network and the
+limits that actually reach `docker` are on that one line.
+
 ## 2. Credentials — only for servers that take an API key
 
 Skip this section unless the server authenticates with a key you have in
@@ -178,6 +191,11 @@ definition, `secret set <server> <KEY>` in the vault. Resolution happens at
 connection rather than sending the literal `${SECRET_X}` upstream, which would
 come back as a 401 indistinguishable from an expired token. HTTP servers take
 the same form: `--header "Authorization=Bearer \${SECRET_X}"`.
+
+`agenthub server inspect <id>` prints the env and headers back, so **which
+placeholder landed where** is readable — that is the point of showing them. The
+one exception is a literal `Authorization` value: a literal there is a pasted
+token, and inspect will not read it out to a terminal.
 
 The rest of the group:
 
@@ -271,9 +289,30 @@ The written entry runs `agenthub connect --client <id>`, so **servers added
 later need no further client changes**. That is the whole point of the
 gateway; do not go back and edit client configs per server.
 
-`client detect` reports `writable`. A client marked `no` keeps its config in a
-format agenthub will not rewrite — re-encoding it would cost the user their
-comments and layout.
+`client detect` reports `writable`, and it is decided by the config's **format,
+not its contents**: the two JSON shapes are written, and TOML, YAML and the
+fileless remote shape are not — that is `codex`, `continue` and `open-webui`,
+and nothing else on the list.
+
+**Comments are not a reason any more.** A `settings.json` carrying the vendor's
+comment header — Zed ships one, VS Code's file is JSONC by convention — is read
+normally, and written by splicing agenthub's own entry into the existing bytes:
+comments, key order and indentation survive because nothing else is rewritten.
+The splice is proved before it reaches the disk, so a locator that cannot place
+the entry costs you a refusal plus the manual snippet, never a mangled config.
+
+When a client is **not** writable, the real `client connect <id>` is what gets
+you the snippet — **not `--dry-run`**. `--dry-run` always renders the JSON
+`mcpServers` entry, the wrong syntax to paste into a TOML or YAML file, while
+the real command writes nothing, exits 1 (`E_CLIENT_UNSUPPORTED`) and prints the
+fragment in that client's own format; under `--json` it is the `hint`. `codex`
+is the exception, immediately below: its connect delegates to the client's own
+CLI and really does succeed. `open-webui` has no file at all — it consumes MCP
+over HTTP, so what comes back is an endpoint to register on the Open WebUI side.
+
+(Ignore the `directly writable clients:` line `client detect` prints under the
+table — it names every client agenthub supports, `codex` included, on the same
+screen where the `WRITABLE` column says `no`. The column is the answer.)
 
 For **codex** that is not a dead end: `client connect codex` runs
 `codex mcp add` for them, after backing the file up and before verifying the
@@ -302,7 +341,13 @@ file. Read its CONNECTED column literally: `yes` / `no` are answers, and
 the file, could not parse it, or does not parse that format at all, and none
 of the three is fixed by running connect again. `agenthub client inspect <id>`
 says which file and why. `--stat-only` skips the reads entirely (no macOS
-privacy prompt) at the cost of answering `?` for everything.
+privacy prompt) at the cost of answering `?` for everything, and `--all` lists
+every supported client, installed here or not.
+
+`unreadable` is now a stronger statement than it used to be: the file does not
+parse **even with its comments blanked out**. So it means real syntax damage —
+a truncated write, a stray bracket — and the fix is in the file, not in
+agenthub. Comments alone no longer produce it.
 
 For codex specifically, `?` means the file is there but written in a way
 agenthub's TOML reader does not model — not that the entry is missing.
@@ -328,8 +373,16 @@ agenthub profile use research                             # the fallback every U
 
 `profile tools` takes the server's **own** tool names (`search`), not the
 `brave__search` the client displays; `agenthub server test <id> --tools`
-lists them. A name matching nothing is not an error, so read back
-`agenthub profile ls` instead of assuming it landed.
+lists them.
+
+A misspelled name is **stored anyway and warned about** — the rule has to be
+writable before anything has ever connected, when there is no recorded tool
+list to check it against. Read those warnings: `--only` is an intersection, so
+one misspelling lets **nothing** through for that server, and the command still
+says OK. And no warning is not a verification — a server whose catalog has
+never been fetched has nothing to check against, which is `no opinion`, not
+`no problem`. `agenthub server test <id> --tools` first is what makes the
+check real.
 
 All narrowing lives on the **profile**; a client only selects one. There is no
 `agenthub scope` group, and a client binding never carries servers or tools of
@@ -419,6 +472,34 @@ Exposed names are `<server>__<tool>`, but **never split on `__` to recover
 them** — a server id or a tool name may itself contain it. Take the server
 from the listing you asked for and the tool name from `server test --tools`.
 
+### `server inspect` also answers "who can see this server"
+
+`inspect` prints a **visibility** section, and it is the one place the two
+halves of that question are joined. Reach for it on the failure that otherwise
+has no obvious next command: the server is enabled, the credential is stored,
+and the client still shows nothing.
+
+```bash
+agenthub server inspect brave        # no --tools needed; visibility is always printed
+```
+
+It names the profiles that **include** the server, each with its tool selector;
+the profiles that **exclude** it (which a list of the others cannot tell you);
+the bound clients that can and cannot reach it; and — always, not only when it
+changes the answer — what a client with **no binding of its own** gets, because
+that is exactly what the person reading is unsure of. Three states stay
+distinct because they need different repairs: a **disabled** server reaches
+nobody whatever the profiles say, an excluded profile is one `profile server
+add` away, and a binding pointing at a profile that no longer exists
+fail-closes to an **empty** scope — which from outside is indistinguishable
+from deliberate exclusion. The count of local tool overrides rides along, worth
+knowing before you compare this report against the names a client displays.
+
+Two properties make it the right first command rather than a nicer one:
+
+- **It is computed from the registry alone.** No client config file is opened — that is `client inspect`'s deliberate, per-client act, and it can raise a macOS privacy prompt — and no daemon is needed, so the answer stays available on exactly the machine that is broken.
+- **It is an upper bound, not a live claim.** The scope chain only ever narrows, so a session can hold less than this. It reports what the configured bindings allow, never what a running session got.
+
 ## 8. When something does not work
 
 | symptom | look here |
@@ -427,11 +508,11 @@ from the listing you asked for and the tool name from `server test --tools`.
 | exit 4 | the command needed a running daemon. Nothing on the path above does — re-read what you actually ran |
 | exit 5 | `agenthub auth status`, then `auth login <server>` |
 | exit 6 | governance refused, deliberately. Report it and stop; do not route around it |
-| exit 7 | another process holds the registry lock, or it is corrupt. Retry once, then say so — do not delete state to clear it |
+| exit 7 | some store's lock is held by another process, or its state is corrupt. The message names which one. Retry once, then say so — do not delete state to clear it |
 | server will not connect | `server test <id>` first — it prints the real error and the child's stderr tail |
-| a tool vanished | a narrowing layer (§6) or a quarantine, before suspecting the server |
+| a tool vanished | `server inspect <id>` — its visibility section names the profile that narrowed it (§6); then a quarantine, before suspecting the server |
 | a server you added is invisible | `add` leaves it DISABLED — `agenthub server enable <id>` |
-| client sees nothing | did the user restart it? `client detect` to confirm the entry is in the file |
+| client sees nothing | `server inspect <id>` first: which profiles reach it, and what an unbound client gets (§7). Then — did the user restart it? `client detect` to confirm the entry is in the file |
 | it connects, but a tool answers wrongly | record the wire — `server trace <id> on`, reproduce, `server logs <id>` (below) |
 
 ### Recording the wire
