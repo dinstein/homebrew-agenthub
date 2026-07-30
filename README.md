@@ -133,6 +133,13 @@ Two paths in the source repository write it, both through
 Which repository's Releases the download URLs point at is
 `HOMEBREW_SOURCE_REPO` in `scripts/homebrew-formula.sh`.
 
+Neither path writes this repository directly. Both hand the finished formula to
+`scripts/tap-sync.sh`, which puts it here together with the skill, as **one
+commit**. The two are not independent — the formula installs a binary and the
+skill documents that same binary's command surface — so a tap where they landed
+separately would have a window in which either one described a version the other
+did not.
+
 The formula installs a prebuilt binary rather than building from source, for
 one reason: `-X main.channel=release` is what makes a shipped binary resolve
 the real data directory instead of a development one. A source-building
@@ -145,6 +152,19 @@ binary to prove it:
 refute_match "(dev)", shell_output("#{bin}/agenthub --version")
 ```
 
-`skills/agenthub/SKILL.md` is the opposite: hand-written, and nothing
-regenerates it. When the CLI's visible surface changes, re-check it by hand
-against a release build, never a `make bin` one.
+`skills/agenthub/SKILL.md` is **generated here too**, from
+`skills/agenthub/SKILL.md` in the source repository, and it carries a banner
+under its frontmatter saying so. Edit it there, not here: a change made in this
+repository survives until the next release and then disappears, without ever
+showing up in a diff anyone reads.
+
+It stopped being hand-maintained in this repository for the reason a second copy
+always does. The document's whole job is to describe the CLI's visible surface,
+and this repository has no way to know that surface changed — so it only tracked
+it when somebody remembered, in a different checkout, after the release. Twice
+nobody did, and the skill went on teaching flags a release build had stopped
+accepting.
+
+What has not changed is how it is written: by hand, and re-checked against a
+**release** build rather than a `make bin` one, because the two do not advertise
+the same commands.
